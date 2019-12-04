@@ -7,3 +7,4 @@
 [submodule "explorer-gui"]
 	path = explorer-gui
 	url = https://github.com/yeecoders/polkascan-pre-explorer-gui.git
+
