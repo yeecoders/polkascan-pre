@@ -1,0 +1,103 @@
+version: '3.2'
+
+services:
+
+
+  explorer-api:
+    build: explorer-api/.
+    image: yeecoders/pre-explorer-api:latest
+    hostname: explorer-api
+    volumes:
+      - './explorer-api:/usr/src/app'
+    command: ./start.sh
+    environment:
+      - PYTHONPATH=/usr/src/app
+      - ENVIRONMENT=prod
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+      - DB_NAME=polkascan
+      - SUBSTRATE_ADDRESS_TYPE=2
+    ports:
+      - '8001:8001'
+    depends_on:
+      - mysql
+
+  explorer-gui:
+    image: yeecoders/explorer-gui:v1.6
+    build:
+      context: explorer-gui/.
+      args:
+        NETWORK_NAME: YeeCo
+        NETWORK_TOKEN_SYMBOL: YEE
+        API_URL: https://pocnet.yeescan.org/api/v1/
+        NETWORK_TOKEN_DECIMALS: 8
+    ports:
+      - '80:80'
+      - '443:443'
+
+    depends_on:
+      - explorer-api
+
+
+
+  harvester-worker:
+    build: harvester/.
+    image: yeecoders/pre-harvester:latest
+    volumes:
+      - './harvester:/usr/src/app'
+    command: celery -A app.tasks worker --loglevel=INFO
+    environment: &env
+      - CELERY_BROKER=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/0
+      - PYTHONPATH=/usr/src/app
+      - ENVIRONMENT=prod
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USERNAME=root
+      - DB_PASSWORD=root
+      - DB_NAME=polkascan
+      - SUBSTRATE_ADDRESS_TYPE=2
+    depends_on:
+      - redis
+      - mysql
+
+  harvester-beat:
+    build: harvester/.
+    image: yeecoders/pre-harvester:latest
+    volumes:
+      - './harvester:/usr/src/app'
+      - '/usr/src/app/data'
+    command: celery -A app.tasks beat --loglevel=INFO  --schedule="data/celerybeat-schedule" --pidfile="data/celerybeat.pid"
+    environment: *env
+    depends_on:
+      - redis
+
+  harvester-monitor:
+    build: harvester/.
+    image: yeecoders/pre-harvester:latest
+    ports:
+      - '5555:5555'
+    command:  flower -A app.tasks --port=5555 --broker=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:3.2.11
+    hostname: redis
+
+  mysql:
+    image: yeecoders/mysql_explorer:latest
+    hostname: mysql
+    volumes:
+      - 'db-data:/var/lib/mysql'
+    ports:
+      - '3306:3306'
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=polkascan
+
+
+volumes:
+  db-data:
